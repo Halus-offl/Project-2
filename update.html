@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login Page</title>
+    <script src="login.js" defer>// login.js
+
+let keystrokes = [];
+const threshold = 300; // Example threshold for keystroke dynamics
+
+document.getElementById("password").addEventListener("keydown", (event) => {
+    const timestamp = Date.now();
+    keystrokes.push({ key: event.key, timestamp: timestamp });
+});
+
+function processLogin() {
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+
+    if (username && password) {
+        const keystrokePattern = analyzeKeystrokes(keystrokes);
+        if (keystrokePattern < threshold) {
+            sendOtp(username);
+        } else {
+            document.getElementById("result").innerText = "Keystroke pattern did not match.";
+        }
+    } else {
+        document.getElementById("result").innerText = "Please enter username and password.";
+    }
+}
+
+function analyzeKeystrokes(keystrokes) {
+    let totalTime = 0;
+    for (let i = 1; i < keystrokes.length; i++) {
+        totalTime += keystrokes[i].timestamp - keystrokes[i - 1].timestamp;
+    }
+    return totalTime;
+}
+
+function sendOtp(username) {
+    fetch('/send-otp', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ username: username })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById("loginForm").style.display = "none";
+            document.getElementById("otpSection").style.display = "block";
+        } else {
+            document.getElementById("result").innerText = "Error sending OTP.";
+        }
+    });
+}
+
+function verifyOtp() {
+    const otp = document.getElementById("otp").value;
+    fetch('/verify-otp', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ otp: otp })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById("result").innerText = "Login successful!";
+        } else {
+            document.getElementById("result").innerText = "Invalid OTP.";
+        }
+    });
+}</script>
+</head>
+<body>
+    <h2>Login Page</h2>
+    <form id="loginForm">
+        <label for="username">Username:</label><br>
+        <input type="text" id="username" name="username"><br>
+        <label for="password">Password:</label><br>
+        <input type="password" id="password" name="password"><br>
+        <button type="button" onclick="processLogin()">Login</button>
+    </form>
+    <div id="otpSection" style="display: none;">
+        <label for="otp">Enter OTP:</label><br>
+        <input type="text" id="otp" name="otp"><br>
+        <button type="button" onclick="verifyOtp()">Verify OTP</button>
+    </div>
+    <div id="result"></div>
+</body>
+</html>
+
+// npm install express body-parser twilio
+// server.js
+
+const express = require('express');
+const bodyParser = require('body-parser');
+const twilio = require('twilio');
+
+const app = express();
+app.use(bodyParser.json());
+
+const accountSid = 'YOUR_TWILIO_ACCOUNT_SID';
+const authToken = 'YOUR_TWILIO_AUTH_TOKEN';
+const client = twilio(accountSid, authToken);
+
+let generatedOtp = null;
+
+app.post('/send-otp', (req, res) => {
+    const { username } = req.body;
+
+    // Generate OTP
+    generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Send OTP to user's phone (assuming username is linked to phone number)
+    client.messages.create({
+        body: `Your OTP is ${generatedOtp}`,
+        from: 'YOUR_TWILIO_PHONE_NUMBER',
+        to: 'USER_PHONE_NUMBER' // Replace with the actual user's phone number
+    }).then(message => {
+        res.json({ success: true });
+    }).catch(error => {
+        res.json({ success: false, error: error.message });
+    });
+});
+
+app.post('/verify-otp', (req, res) => {
+    const { otp } = req.body;
+
+    if (otp === generatedOtp) {
+        res.json({ success: true });
+    } else {
+        res.json({ success: false });
+    }
+});
+
+app.listen(3000, () => {
+    console.log('Server is running on port 3000');
+});
